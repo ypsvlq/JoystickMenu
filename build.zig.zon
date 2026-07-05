@@ -1,0 +1,17 @@
+.{
+    .name = .JoystickMenu,
+    .version = "0.0.0",
+    .fingerprint = 0xb1a4d07c446db21,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .dvui = .{
+            .url = "git+https://github.com/david-vanderson/dvui.git#3d2555337261743637f50375b2ac7bb1cf6b0510",
+            .hash = "dvui-0.5.0-dev-AQFJmV1i-gBHqte8mSi-IOJu02dp7b8ZNIDPKEpWMt7-",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
