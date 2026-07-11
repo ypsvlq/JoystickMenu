@@ -62,6 +62,10 @@ pub fn main(init: std.process.Init) !void {
         wio.messageBox(.err, "Error", "Failed to load config.txt");
         return err;
     };
+    if (config.entries.len == 0) {
+        wio.messageBox(.err, "Error", "No entries in config.txt");
+        return;
+    }
 
     var events: wio.EventQueue = .empty;
     defer events.deinit();
@@ -91,7 +95,7 @@ pub fn main(init: std.process.Init) !void {
 
     var state: State = .{};
 
-    const timeout = if (config.timeout > 0)
+    var timeout = if (config.timeout > 0)
         std.Io.Timestamp.now(io, .awake).addDuration(.fromSeconds(config.timeout)).nanoseconds
     else
         0;
@@ -112,12 +116,14 @@ pub fn main(init: std.process.Init) !void {
                 if (config.buttons.up < buttons.len) {
                     if (buttons[config.buttons.up] and state.position > 0 and !state.ignore_up) {
                         state.position -= 1;
+                        timeout = 0;
                     }
                     state.ignore_up = buttons[config.buttons.up];
                 }
                 if (config.buttons.down < buttons.len) {
                     if (buttons[config.buttons.down] and state.position + 1 < config.entries.len and !state.ignore_down) {
                         state.position += 1;
+                        timeout = 0;
                     }
                     state.ignore_down = buttons[config.buttons.down];
                 }
@@ -148,6 +154,9 @@ pub fn main(init: std.process.Init) !void {
                 tl.addText(entry.name, .{ .font = font });
                 tl.addText("\n", .{});
             }
+            if (timeout > 0) {
+                tl.format("\n(starting {s} in {} seconds)", .{ config.entries[0].name, std.Io.Timestamp.now(io, .awake).durationTo(.{ .nanoseconds = timeout }).toSeconds() }, .{});
+            }
             tl.deinit();
         }
         _ = try dvui_window.end(.{ .manage_backend = false });
@@ -157,8 +166,6 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn run(io: std.Io, config: Config, position: usize) !void {
-    if (config.entries.len == 0) return;
-
     const exec = config.entries[position].exec;
 
     for (config.clients) |client| {
