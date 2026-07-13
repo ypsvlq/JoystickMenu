@@ -188,6 +188,7 @@ fn run(io: std.Io, config: Config, position: usize) !void {
 }
 
 fn joystickConnected(device: wio.JoystickDevice) void {
+    defer device.release();
     if (maybe_joystick == null) {
         maybe_joystick = device.open();
     }
