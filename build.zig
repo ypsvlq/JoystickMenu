@@ -4,16 +4,19 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const dvui = b.dependency("dvui", .{
+    const wio = b.dependency("wio", .{
         .target = target,
         .optimize = optimize,
-        .backend = .wio,
-        .wio_joystick = true,
-        .freetype = false,
-        .@"tiny-file-dialogs" = false,
-        .@"tree-sitter" = false,
-        .tvg = false,
+        .enable_framebuffer = true,
+        .enable_joystick = true,
     });
+
+    const TrueType = b.dependency("TrueType", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const ttf_bitstream_vera = b.dependency("ttf_bitstream_vera", .{});
 
     const server = b.addExecutable(.{
         .name = "server",
@@ -22,7 +25,10 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "dvui", .module = dvui.module("dvui_wio") },
+                .{ .name = "wio", .module = wio.module("wio") },
+                .{ .name = "TrueType", .module = TrueType.module("TrueType") },
+                .{ .name = "font", .module = b.createModule(.{ .root_source_file = ttf_bitstream_vera.path("Vera.ttf") }) },
+                .{ .name = "font_bold", .module = b.createModule(.{ .root_source_file = ttf_bitstream_vera.path("VeraBd.ttf") }) },
             },
         }),
     });

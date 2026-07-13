@@ -1,6 +1,6 @@
 const std = @import("std");
-const dvui = @import("dvui");
-const wio = dvui.backend.wio;
+const wio = @import("wio");
+const TrueType = @import("TrueType");
 const shared = @import("shared.zig");
 
 const Config = struct {
@@ -9,12 +9,18 @@ const Config = struct {
         name: []const u8,
         exec: []const u8,
     },
-    timeout: u32 = 0,
+    timeout: u16,
     clients: []const []const u8,
     buttons: struct {
-        up: u8,
-        down: u8,
-        select: u8,
+        up: u16,
+        down: u16,
+        select: u16,
+    },
+    ui: struct {
+        x: u16,
+        y: u16,
+        title_size: u16,
+        entry_size: u16,
     },
 
     pub fn load(arena: std.mem.Allocator, io: std.Io) !Config {
@@ -38,9 +44,8 @@ const State = struct {
     position: usize = 0,
     ignore_up: bool = false,
     ignore_down: bool = false,
+    now_seconds: i64 = 0,
 };
-
-const gl_options: wio.GlOptions = .{ .major_version = 3 };
 
 var maybe_joystick: ?wio.Joystick = null;
 
@@ -74,24 +79,15 @@ pub fn main(init: std.process.Init) !void {
         .event_fn_data = &events,
         .title = "JoystickMenu",
         .mode = .fullscreen,
-        .gl_options = gl_options,
     });
     defer window.destroy();
     window.setCursor(.none);
 
-    var context = try window.glCreateContext(.{ .options = gl_options });
-    defer context.destroy();
-    window.glMakeContextCurrent(context);
-    window.glSwapInterval(1);
+    const font = try TrueType.load(@embedFile("font"));
+    const font_bold = try TrueType.load(@embedFile("font_bold"));
 
-    var dvui_wio = try dvui.backend.init(.{ .io = io, .window = window });
-    defer dvui_wio.deinit();
-
-    var dvui_opengl = try dvui.render_backend.init(gpa, wio.glGetProcAddress, "130");
-    defer dvui_opengl.deinit();
-
-    var dvui_window = try dvui.Window.init(@src(), gpa, dvui_wio.backend(&dvui_opengl), .{});
-    defer dvui_window.deinit();
+    var maybe_ui: ?Ui = null;
+    defer if (maybe_ui) |*ui| ui.deinit(gpa);
 
     var state: State = .{};
 
@@ -103,10 +99,20 @@ pub fn main(init: std.process.Init) !void {
     while (true) {
         wio.update();
 
+        var draw = false;
+
         while (events.pop()) |event| {
             switch (event) {
                 .close => return,
-                else => _ = try dvui_wio.addEvent(&dvui_window, event),
+                .size_physical => |new_size| {
+                    if (maybe_ui) |*ui| {
+                        try ui.resize(&window, new_size);
+                    } else {
+                        maybe_ui = try .init(&window, new_size);
+                    }
+                },
+                .draw => draw = true,
+                else => {},
             }
         }
 
@@ -117,6 +123,7 @@ pub fn main(init: std.process.Init) !void {
                     if (buttons[config.buttons.up] and state.position > 0 and !state.ignore_up) {
                         state.position -= 1;
                         timeout = 0;
+                        draw = true;
                     }
                     state.ignore_up = buttons[config.buttons.up];
                 }
@@ -124,6 +131,7 @@ pub fn main(init: std.process.Init) !void {
                     if (buttons[config.buttons.down] and state.position + 1 < config.entries.len and !state.ignore_down) {
                         state.position += 1;
                         timeout = 0;
+                        draw = true;
                     }
                     state.ignore_down = buttons[config.buttons.down];
                 }
@@ -137,31 +145,37 @@ pub fn main(init: std.process.Init) !void {
             }
         }
 
-        if (timeout > 0 and std.Io.Timestamp.now(io, .awake).nanoseconds > timeout) {
-            try run(io, config, 0);
-            return;
+        if (timeout > 0) {
+            const now = std.Io.Timestamp.now(io, .awake);
+            if (now.nanoseconds > timeout) {
+                try run(io, config, 0);
+                return;
+            } else if (now.toSeconds() != state.now_seconds) {
+                draw = true;
+                state.now_seconds = now.toSeconds();
+            }
         }
 
-        dvui_opengl.clear();
-
-        try dvui_window.begin(dvui_wio.nanoTime());
-        {
-            var tl = dvui.textLayout(@src(), .{}, .{ .background = true, .expand = .both });
-            tl.addText(config.title, .{ .font = .theme(.title) });
-            tl.addText("\n\n", .{});
-            for (config.entries, 0..) |entry, i| {
-                const font = if (i == state.position) dvui.themeGet().font_body.withWeight(.bold) else dvui.themeGet().font_body;
-                tl.addText(entry.name, .{ .font = font });
-                tl.addText("\n", .{});
+        if (draw) {
+            if (maybe_ui) |*ui| {
+                ui.clear();
+                var y = config.ui.y;
+                try ui.text(font, gpa, config.title, config.ui.title_size, config.ui.x, &y);
+                try ui.text(font, gpa, "", config.ui.entry_size, config.ui.x, &y);
+                for (config.entries, 0..) |entry, i| {
+                    try ui.text(if (i == state.position) font_bold else font, gpa, entry.name, config.ui.entry_size, config.ui.x, &y);
+                }
+                if (timeout > 0) {
+                    const text = try std.fmt.allocPrint(gpa, "(starting {s} in {} seconds)", .{ config.entries[0].name, std.Io.Timestamp.now(io, .awake).durationTo(.{ .nanoseconds = timeout }).toSeconds() });
+                    defer gpa.free(text);
+                    try ui.text(font, gpa, "", config.ui.entry_size, config.ui.x, &y);
+                    try ui.text(font, gpa, text, config.ui.entry_size, config.ui.x, &y);
+                }
+                window.presentFramebuffer(&ui.framebuffer);
             }
-            if (timeout > 0) {
-                tl.format("\n(starting {s} in {} seconds)", .{ config.entries[0].name, std.Io.Timestamp.now(io, .awake).durationTo(.{ .nanoseconds = timeout }).toSeconds() }, .{});
-            }
-            tl.deinit();
         }
-        _ = try dvui_window.end(.{ .manage_backend = false });
 
-        window.glSwapBuffers();
+        wio.wait(.{ .timeout_ns = std.time.ns_per_s / 30 });
     }
 }
 
@@ -186,6 +200,73 @@ fn run(io: std.Io, config: Config, position: usize) !void {
 
     _ = try std.process.spawn(io, .{ .argv = &.{exec} });
 }
+
+const Ui = struct {
+    framebuffer: wio.Framebuffer,
+    size: wio.Size,
+    pixels: std.ArrayList(u8) = .empty,
+
+    fn init(window: *wio.Window, size: wio.Size) !Ui {
+        return .{
+            .framebuffer = try window.createFramebuffer(size),
+            .size = size,
+        };
+    }
+
+    fn deinit(self: *Ui, gpa: std.mem.Allocator) void {
+        self.framebuffer.destroy();
+        self.pixels.deinit(gpa);
+    }
+
+    fn resize(self: *Ui, window: *wio.Window, size: wio.Size) !void {
+        self.framebuffer.destroy();
+        self.framebuffer = try window.createFramebuffer(size);
+        self.size = size;
+    }
+
+    fn clear(self: *Ui) void {
+        for (0..self.size.height) |y| {
+            for (0..self.size.width) |x| {
+                self.framebuffer.setPixel(x, y, 0xFFFFFF);
+            }
+        }
+    }
+
+    fn text(self: *Ui, font: TrueType, gpa: std.mem.Allocator, chars: []const u8, height: u16, start_x: u16, start_y: *u16) !void {
+        const scale = font.scaleForPixelHeight(height);
+        const metrics = font.verticalMetrics();
+
+        var x = start_x;
+        var y = start_y.*;
+        y += @round(metrics.ascent * scale);
+
+        for (chars) |char| {
+            const glyph = font.codepointGlyphIndex(char);
+            if (font.glyphBitmap(gpa, &self.pixels, glyph, scale, scale)) |bitmap| {
+                var y_in: u16 = 0;
+                while (y_in < bitmap.height) : (y_in += 1) {
+                    const y_out = @as(isize, y) + bitmap.off_y + y_in;
+                    if (y_out >= self.size.height) break;
+                    var x_in: u16 = 0;
+                    while (x_in < bitmap.width) : (x_in += 1) {
+                        const x_out = @as(isize, x) + bitmap.off_x + x_in;
+                        if (x_out >= self.size.width) break;
+                        const pixel: u32 = 0xFF - self.pixels.items[y_in * bitmap.width + x_in];
+                        self.framebuffer.setPixel(@intCast(x_out), @intCast(y_out), pixel << 16 | pixel << 8 | pixel);
+                    }
+                }
+                self.pixels.clearRetainingCapacity();
+            } else |err| switch (err) {
+                error.GlyphNotFound => {},
+                else => return err,
+            }
+            x += @round(font.glyphHMetrics(glyph).advance_width * scale);
+        }
+
+        y += @round((-metrics.descent + metrics.line_gap) * scale);
+        start_y.* = y;
+    }
+};
 
 fn joystickConnected(device: wio.JoystickDevice) void {
     defer device.release();

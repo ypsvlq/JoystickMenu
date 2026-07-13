@@ -4,9 +4,17 @@
     .fingerprint = 0xb1a4d07c446db21,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
-        .dvui = .{
-            .url = "git+https://github.com/david-vanderson/dvui.git#3d2555337261743637f50375b2ac7bb1cf6b0510",
-            .hash = "dvui-0.5.0-dev-AQFJmV1i-gBHqte8mSi-IOJu02dp7b8ZNIDPKEpWMt7-",
+        .wio = .{
+            .url = "git+https://github.com/ypsvlq/wio.git#94eb5a47cfa8d1df13e4fb5b542587227335d857",
+            .hash = "wio-0.0.0-8xHrr0XRBwDPmrErBCH3SZvBtQ33o7JJ0acOdP53yp3A",
+        },
+        .TrueType = .{
+            .url = "git+https://codeberg.org/andrewrk/TrueType.git#e46bd6a01e1be78ee280284733993a988eaef0d6",
+            .hash = "TrueType-0.0.0-Ne-mWOdyAQDy0_HzImRIFlqXnBWQ97MlU6S1dGJvH4nX",
+        },
+        .ttf_bitstream_vera = .{
+            .url = "https://download.gnome.org/sources/ttf-bitstream-vera/1.10/ttf-bitstream-vera-1.10.tar.gz",
+            .hash = "N-V-__8AAGoPCQDAQS4KTRWgu3mkEtu8-Dnht7WfLVmIgdT0",
         },
     },
     .paths = .{
