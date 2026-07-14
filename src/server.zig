@@ -7,7 +7,8 @@ const Config = struct {
     title: []const u8,
     entries: []const struct {
         name: []const u8,
-        exec: []const u8,
+        start: []const u8,
+        stop: []const u8,
     },
     timeout: u16,
     clients: []const []const u8,
@@ -38,13 +39,6 @@ const Config = struct {
             return err;
         };
     }
-};
-
-const State = struct {
-    position: usize = 0,
-    ignore_up: bool = false,
-    ignore_down: bool = false,
-    now_seconds: i64 = 0,
 };
 
 var maybe_joystick: ?wio.Joystick = null;
@@ -89,7 +83,11 @@ pub fn main(init: std.process.Init) !void {
     var maybe_ui: ?Ui = null;
     defer if (maybe_ui) |*ui| ui.deinit(gpa);
 
-    var state: State = .{};
+    var position: usize = 0;
+    var ignore_up = false;
+    var ignore_down = false;
+    var ignore_select = false;
+    var last_timeout_seconds: i64 = 0;
 
     var timeout = if (config.timeout > 0)
         std.Io.Timestamp.now(io, .awake).addDuration(.fromSeconds(config.timeout)).nanoseconds
@@ -100,6 +98,7 @@ pub fn main(init: std.process.Init) !void {
         wio.update();
 
         var draw = false;
+        var run = false;
 
         while (events.pop()) |event| {
             switch (event) {
@@ -120,24 +119,27 @@ pub fn main(init: std.process.Init) !void {
             if (joystick.poll()) |joystick_state| {
                 const buttons = joystick_state.buttons;
                 if (config.buttons.up < buttons.len) {
-                    if (buttons[config.buttons.up] and state.position > 0 and !state.ignore_up) {
-                        state.position -= 1;
+                    if (buttons[config.buttons.up] and position > 0 and !ignore_up) {
+                        position -= 1;
                         timeout = 0;
                         draw = true;
                     }
-                    state.ignore_up = buttons[config.buttons.up];
+                    ignore_up = buttons[config.buttons.up];
                 }
                 if (config.buttons.down < buttons.len) {
-                    if (buttons[config.buttons.down] and state.position + 1 < config.entries.len and !state.ignore_down) {
-                        state.position += 1;
+                    if (buttons[config.buttons.down] and position + 1 < config.entries.len and !ignore_down) {
+                        position += 1;
                         timeout = 0;
                         draw = true;
                     }
-                    state.ignore_down = buttons[config.buttons.down];
+                    ignore_down = buttons[config.buttons.down];
                 }
-                if (config.buttons.select < buttons.len and buttons[config.buttons.select]) {
-                    try run(io, config, state.position);
-                    return;
+                if (config.buttons.select < buttons.len) {
+                    if (buttons[config.buttons.select] and !ignore_select) {
+                        run = true;
+                        timeout = 0;
+                    }
+                    ignore_select = buttons[config.buttons.select];
                 }
             } else {
                 joystick.close();
@@ -148,12 +150,28 @@ pub fn main(init: std.process.Init) !void {
         if (timeout > 0) {
             const now = std.Io.Timestamp.now(io, .awake);
             if (now.nanoseconds > timeout) {
-                try run(io, config, 0);
-                return;
-            } else if (now.toSeconds() != state.now_seconds) {
+                run = true;
+                timeout = 0;
+            } else if (now.toSeconds() != last_timeout_seconds) {
                 draw = true;
-                state.now_seconds = now.toSeconds();
+                last_timeout_seconds = now.toSeconds();
             }
+        }
+
+        if (run) {
+            if (maybe_ui) |*ui| {
+                ui.clear();
+                var y = config.ui.y;
+                try ui.text(font, gpa, "Running...", config.ui.entry_size, config.ui.x, &y);
+                window.presentFramebuffer(&ui.framebuffer);
+                draw = true;
+            }
+
+            var start = try exec(io, config.clients, config.entries[position].start);
+            _ = try start.wait(io);
+
+            var stop = try exec(io, config.clients, config.entries[position].stop);
+            _ = try stop.wait(io);
         }
 
         if (draw) {
@@ -163,7 +181,7 @@ pub fn main(init: std.process.Init) !void {
                 try ui.text(font, gpa, config.title, config.ui.title_size, config.ui.x, &y);
                 try ui.text(font, gpa, "", config.ui.entry_size, config.ui.x, &y);
                 for (config.entries, 0..) |entry, i| {
-                    try ui.text(if (i == state.position) font_bold else font, gpa, entry.name, config.ui.entry_size, config.ui.x, &y);
+                    try ui.text(if (i == position) font_bold else font, gpa, entry.name, config.ui.entry_size, config.ui.x, &y);
                 }
                 if (timeout > 0) {
                     const text = try std.fmt.allocPrint(gpa, "(starting {s} in {} seconds)", .{ config.entries[0].name, std.Io.Timestamp.now(io, .awake).durationTo(.{ .nanoseconds = timeout }).toSeconds() });
@@ -179,10 +197,8 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn run(io: std.Io, config: Config, position: usize) !void {
-    const exec = config.entries[position].exec;
-
-    for (config.clients) |client| {
+fn exec(io: std.Io, clients: []const []const u8, command: []const u8) !std.process.Child {
+    for (clients) |client| {
         const ip = std.Io.net.IpAddress.parseIp4(client, shared.port) catch |err| {
             wio.messageBox(.err, "Error", "Invalid client IP");
             return err;
@@ -195,10 +211,10 @@ fn run(io: std.Io, config: Config, position: usize) !void {
         defer stream.close(io);
 
         var writer = stream.writer(io, &.{});
-        try writer.interface.writeAll(exec);
+        try writer.interface.writeAll(command);
     }
 
-    _ = try std.process.spawn(io, .{ .argv = &.{exec} });
+    return try std.process.spawn(io, .{ .argv = &.{command} });
 }
 
 const Ui = struct {

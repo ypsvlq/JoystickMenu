@@ -10,13 +10,16 @@ pub fn main(init: std.process.Init) !void {
     var server = try ip.listen(io, .{});
     defer server.deinit(io);
 
-    const stream = try server.accept(io);
-    defer stream.close(io);
-
-    var reader = stream.reader(io, &.{});
-
     var list: std.ArrayList(u8) = .empty;
-    try reader.interface.appendRemaining(arena, &list, .unlimited);
 
-    _ = try std.process.spawn(io, .{ .argv = &.{list.items} });
+    while (true) {
+        const stream = try server.accept(io);
+        defer stream.close(io);
+
+        var reader = stream.reader(io, &.{});
+        try reader.interface.appendRemaining(arena, &list, .unlimited);
+
+        _ = try std.process.spawn(io, .{ .argv = &.{list.items} });
+        list.clearRetainingCapacity();
+    }
 }
