@@ -8,8 +8,8 @@ const Config = struct {
     entries: []const struct {
         name: []const u8,
         start: []const u8,
-        stop: []const u8,
     },
+    stop: []const u8,
     timeout: u16,
     clients: []const []const u8,
     buttons: struct {
@@ -65,6 +65,7 @@ pub fn main(init: std.process.Init) !void {
         wio.messageBox(.err, "Error", "No entries in config.txt");
         return;
     }
+    try exec(io, config.clients, config.stop);
 
     var events: wio.EventQueue = .empty;
     defer events.deinit();
@@ -167,11 +168,11 @@ pub fn main(init: std.process.Init) !void {
                 draw = true;
             }
 
-            var start = try exec(io, config.clients, config.entries[position].start);
+            try exec(io, config.clients, config.entries[position].start);
+            var start = try std.process.spawn(io, .{ .argv = &.{config.entries[position].start} });
             _ = try start.wait(io);
 
-            var stop = try exec(io, config.clients, config.entries[position].stop);
-            _ = try stop.wait(io);
+            try exec(io, config.clients, config.stop);
         }
 
         if (draw) {
@@ -197,7 +198,7 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn exec(io: std.Io, clients: []const []const u8, command: []const u8) !std.process.Child {
+fn exec(io: std.Io, clients: []const []const u8, command: []const u8) !void {
     for (clients) |client| {
         const ip = std.Io.net.IpAddress.parseIp4(client, shared.port) catch |err| {
             wio.messageBox(.err, "Error", "Invalid client IP");
@@ -213,8 +214,6 @@ fn exec(io: std.Io, clients: []const []const u8, command: []const u8) !std.proce
         var writer = stream.writer(io, &.{});
         try writer.interface.writeAll(command);
     }
-
-    return try std.process.spawn(io, .{ .argv = &.{command} });
 }
 
 const Ui = struct {
