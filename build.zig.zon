@@ -2,15 +2,15 @@
     .name = .JoystickMenu,
     .version = "0.0.0",
     .fingerprint = 0xb1a4d07c446db21,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .wio = .{
-            .url = "git+https://github.com/ypsvlq/wio.git#94eb5a47cfa8d1df13e4fb5b542587227335d857",
-            .hash = "wio-0.0.0-8xHrr0XRBwDPmrErBCH3SZvBtQ33o7JJ0acOdP53yp3A",
+            .url = "git+https://github.com/ypsvlq/wio.git#9a74a3a8e114162bc0fdb13b7664e4018b7e3168",
+            .hash = "wio-0.0.0-8xHrr3oTCAAXDVug4r82SZYOjCKJUdLU2JlUrwjCQee_",
         },
         .TrueType = .{
-            .url = "git+https://codeberg.org/andrewrk/TrueType.git#e46bd6a01e1be78ee280284733993a988eaef0d6",
-            .hash = "TrueType-0.0.0-Ne-mWOdyAQDy0_HzImRIFlqXnBWQ97MlU6S1dGJvH4nX",
+            .url = "git+https://codeberg.org/andrewrk/TrueType.git#46319ef728dca8422dfc512cdc3423fa5649679c",
+            .hash = "TrueType-3.0.0-dev-Ne-mWD14AQB5YZL8AaHgsHhWWHxusJfsQZmzApg-f_QZ",
         },
         .ttf_bitstream_vera = .{
             .url = "https://download.gnome.org/sources/ttf-bitstream-vera/1.10/ttf-bitstream-vera-1.10.tar.gz",

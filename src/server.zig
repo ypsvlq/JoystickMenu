@@ -33,9 +33,9 @@ const Config = struct {
         try reader.interface.appendRemaining(arena, &list, .unlimited);
         const bytes = try list.toOwnedSliceSentinel(arena, 0);
 
-        var diagnostics: std.zon.parse.Diagnostics = .{};
-        return std.zon.parse.fromSliceAlloc(Config, arena, bytes, &diagnostics, .{}) catch |err| {
-            std.log.err("{f}", .{diagnostics});
+        var diagnostics: std.zon.parse.Diagnostics = .{ .errors = &.{} };
+        return std.zon.parse.fromSlice(Config, .{ .gpa = arena, .arena = arena, .source = bytes, .diagnostics = &diagnostics }) catch |err| {
+            diagnostics.log("config.txt");
             return err;
         };
     }
@@ -257,24 +257,20 @@ const Ui = struct {
 
         for (chars) |char| {
             const glyph = font.codepointGlyphIndex(char);
-            if (font.glyphBitmap(gpa, &self.pixels, glyph, scale, scale)) |bitmap| {
-                var y_in: u16 = 0;
-                while (y_in < bitmap.height) : (y_in += 1) {
-                    const y_out = @as(isize, y) + bitmap.off_y + y_in;
-                    if (y_out >= self.size.height) break;
-                    var x_in: u16 = 0;
-                    while (x_in < bitmap.width) : (x_in += 1) {
-                        const x_out = @as(isize, x) + bitmap.off_x + x_in;
-                        if (x_out >= self.size.width) break;
-                        const pixel: u32 = 0xFF - self.pixels.items[y_in * bitmap.width + x_in];
-                        self.framebuffer.setPixel(@intCast(x_out), @intCast(y_out), pixel << 16 | pixel << 8 | pixel);
-                    }
+            const bitmap = try font.glyphBitmap(gpa, &self.pixels, glyph, scale, scale);
+            var y_in: u16 = 0;
+            while (y_in < bitmap.height) : (y_in += 1) {
+                const y_out = @as(isize, y) + bitmap.off_y + y_in;
+                if (y_out >= self.size.height) break;
+                var x_in: u16 = 0;
+                while (x_in < bitmap.width) : (x_in += 1) {
+                    const x_out = @as(isize, x) + bitmap.off_x + x_in;
+                    if (x_out >= self.size.width) break;
+                    const pixel: u32 = 0xFF - self.pixels.items[y_in * bitmap.width + x_in];
+                    self.framebuffer.setPixel(@intCast(x_out), @intCast(y_out), pixel << 16 | pixel << 8 | pixel);
                 }
-                self.pixels.clearRetainingCapacity();
-            } else |err| switch (err) {
-                error.GlyphNotFound => {},
-                else => return err,
             }
+            self.pixels.clearRetainingCapacity();
             x += @round(font.glyphHMetrics(glyph).advance_width * scale);
         }
 
