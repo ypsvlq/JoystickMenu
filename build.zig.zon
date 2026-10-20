@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .wio = .{
-            .url = "git+https://github.com/ypsvlq/wio.git#9a74a3a8e114162bc0fdb13b7664e4018b7e3168",
-            .hash = "wio-0.0.0-8xHrr3oTCAAXDVug4r82SZYOjCKJUdLU2JlUrwjCQee_",
+            .url = "git+https://github.com/ypsvlq/wio.git#874284761facd422eedd17a05ce5ac507f41fbed",
+            .hash = "wio-0.0.0-8xHrry4uCAA55A9BqTQx3dXnOE3lGugrgZJjEP9L1EjN",
         },
         .TrueType = .{
             .url = "git+https://codeberg.org/andrewrk/TrueType.git#46319ef728dca8422dfc512cdc3423fa5649679c",

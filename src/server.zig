@@ -41,18 +41,18 @@ const Config = struct {
     }
 };
 
-var maybe_joystick: ?wio.Joystick = null;
-
 pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
     const gpa = init.gpa;
     const io = init.io;
 
+    var maybe_joystick: ?wio.Joystick = null;
+
     try wio.init(.{
         .allocator = gpa,
         .io = io,
         .eventFn = wio.EventQueue.eventFn,
-        .joystickConnectedFn = joystickConnected,
+        .joystick_connected_callback = .{ .function = joystickConnected, .data = &maybe_joystick },
     });
     defer wio.deinit();
     defer if (maybe_joystick) |*joystick| joystick.close();
@@ -164,7 +164,7 @@ pub fn main(init: std.process.Init) !void {
                 ui.clear();
                 var y = config.ui.y;
                 try ui.text(font, gpa, "Running...", config.ui.entry_size, config.ui.x, &y);
-                window.presentFramebuffer(&ui.framebuffer);
+                window.presentFramebuffer(&ui.framebuffer, .{});
                 draw = true;
             }
 
@@ -190,7 +190,7 @@ pub fn main(init: std.process.Init) !void {
                     try ui.text(font, gpa, "", config.ui.entry_size, config.ui.x, &y);
                     try ui.text(font, gpa, text, config.ui.entry_size, config.ui.x, &y);
                 }
-                window.presentFramebuffer(&ui.framebuffer);
+                window.presentFramebuffer(&ui.framebuffer, .{});
             }
         }
 
@@ -279,9 +279,10 @@ const Ui = struct {
     }
 };
 
-fn joystickConnected(device: wio.JoystickDevice) void {
+fn joystickConnected(data: ?*anyopaque, device: wio.JoystickDevice) void {
     defer device.release();
-    if (maybe_joystick == null) {
-        maybe_joystick = device.open();
+    const maybe_joystick: *?wio.Joystick = @ptrCast(@alignCast(data));
+    if (maybe_joystick.* == null) {
+        maybe_joystick.* = device.open();
     }
 }
